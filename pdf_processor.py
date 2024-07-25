@@ -78,11 +78,11 @@ class PDFProcessor:
 
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(self.downloaded_pcfrom_path) if f.endswith('.pdf')]
-        tag_to_pdf_map = {}
+        # tag_to_pdf_map = {}
         for pdf_file in pdf_files:
             pdf_path = os.path.join(self.downloaded_pcfrom_path, pdf_file)
-            self.split_pdf_by_tag(pdf_path)
-            self.logger.info(f"Total pages found in {pdf_file}: {self.total_pages_all_pdfs}")
+            number_pages=self.split_pdf_by_tag(pdf_path)
+            self.logger.info(f"Total pages found in {pdf_file}: {number_pages}")
 
             for tag, pdf_filename in self.tag_to_pdf.items():
                 target_dir = self.find_target_directory(tag)
@@ -92,23 +92,38 @@ class PDFProcessor:
                     pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
                     self.open_pdf(pdf_full_path)
 
-                    if self.tag_signature[tag]:
-                        if "master" in self.tag_to_degree[tag].lower() and tag in self.tag_to_hours:
-                            if not self.tag_graduation_status[tag][0] and not self.tag_paper_requirements[tag][0]:
-                                self.handle_folder_move(tag, target_dir)
-                            else:
-                                self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
-                        else:
-                            self.logger.warning(f"Missing credit hours for master's degree for tag: {tag} in PDF {pdf_file}")
-                    else:
-                        self.logger.warning(f"Missing signature for tag: {tag} in PDF {pdf_file}")
+                    if self.is_info_complete(tag,pdf_file):
+                        self.handle_folder_move(tag, target_dir)
                 else:
                     self.logger.warning(f"Target directory not found for tag {tag} in PDF {pdf_file}")
 
-            tag_to_pdf_map[pdf_file] = self.tag_to_pdf
-
+            # tag_to_pdf_map[pdf_file] = self.tag_to_pdf
+        
         self.logger.info(f"Total number of pages in all PDFs: {self.total_pages_all_pdfs}")
-        return tag_to_pdf_map
+        self.logger.info(f"process all pdfs Completed")
+
+        # return tag_to_pdf_map
+
+
+    def is_info_complete(self,tag,pdf_file):
+        info_complete=True
+        # check signature
+        if not self.tag_signature[tag]:
+            self.logger.warning(f"Missing signature for tag: {tag} in PDF {pdf_file}")
+            info_complete=False
+                                
+        if "master" in self.tag_to_degree[tag].lower() and tag not in self.tag_to_hours:
+            self.logger.warning(f"Missing credit hours for master's degree for tag: {tag} in PDF {pdf_file}")
+            info_complete=False
+
+        missing_grad_status=self.tag_graduation_status[tag][0]
+        missing_paper_req=self.tag_paper_requirements[tag][0]
+        if missing_grad_status and missing_paper_req :
+            self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
+            info_complete=False
+
+        return info_complete
+    
 
     def split_pdf_by_tag(self, pdf_path):
         doc = fitz.open(pdf_path)
@@ -142,6 +157,8 @@ class PDFProcessor:
                         self.tag_to_hours[tag[0]] = hours[0]
                 else:
                     self.logger.warning(f"No tag found on page {page.number + 1} of {pdf_path}")
+
+            return total_pages
 
         except Exception as e:
             self.logger.error(f"Failed to process PDF {pdf_path}: {e}")
@@ -281,6 +298,6 @@ class PDFProcessor:
 if __name__ == "__main__":
     config_path = "conf.json"  # Replace with your config file path
     pdf_processor = PDFProcessor(config_path)
-    tag_to_pdf_map = pdf_processor.process_all_pdfs()
+    pdf_processor.process_all_pdfs()
     # print(tag_to_pdf_map)
     # pdf_processor.rename_logic()
