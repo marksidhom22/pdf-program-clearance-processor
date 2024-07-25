@@ -1,0 +1,14 @@
+{
+    "tesseract_cmd": "",
+    "target_root": "",
+    "downloaded_pcfrom_path": "proccess_pdf",
+"postpone_path" : "",
+"No Paper Required" : "",
+"Paper Required":  "",
+"paths" : [
+    ""],
+    "logging": {
+        "level": "INFO",
+        "format": "%(asctime)s - %(levelname)s - %(message)s"
+    }
+}

@@ -1,0 +1,286 @@
+from PIL import Image
+import pytesseract
+import fitz  # PyMuPDF
+import os
+import re
+import logging
+from datetime import datetime
+import shutil
+import json
+import cv2
+import numpy as np
+
+# Set the Tesseract OCR path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Users\marks\AppData\Local\Tesseract-OCR\tesseract.exe'
+
+class ConfigLoader:
+    """Loads the configuration from a JSON file."""
+    @staticmethod
+    def load_config(config_path):
+        with open(config_path) as f:
+            return json.load(f)
+
+class LoggerSetup:
+    """Sets up logging for the application."""
+    @staticmethod
+    def setup_logging(output_dir):
+        log_filename = os.path.join(output_dir, "process.log")
+        logging.basicConfig(filename=log_filename, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logger = logging.getLogger()
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        return logger
+
+class DirectoryManager:
+    """Manages directory creation and file operations."""
+    @staticmethod
+    def create_output_directory():
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = os.path.join(os.getcwd(), date_str)
+        os.makedirs(output_dir, exist_ok=True)
+        return output_dir
+
+    @staticmethod
+    def copy_file_to_directory(source, destination, logger):
+        try:
+            shutil.copy(source, destination)
+            logger.info(f"File {source} copied to {destination}")
+        except Exception as e:
+            logger.error(f"Failed to copy {source} to {destination}: {e}")
+
+    @staticmethod
+    def move_folder(source_folder, destination_root, logger):
+        destination_folder = os.path.join(destination_root, os.path.basename(source_folder))
+        try:
+            shutil.move(source_folder, destination_folder)
+            logger.info(f"Moved folder {source_folder} to {destination_folder}")
+        except Exception as e:
+            logger.error(f"Failed to move folder {source_folder} to {destination_folder}: {e}")
+
+class PDFProcessor:
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self.output_dir = DirectoryManager.create_output_directory()
+        self.logger = LoggerSetup.setup_logging(self.output_dir)
+        self.config = ConfigLoader.load_config(self.config_path)
+        self.target_root = self.config["target_root"]
+        self.downloaded_pcfrom_path = self.config["downloaded_pcfrom_path"]
+        self.total_pages_all_pdfs = 0
+        self.tag_to_pdf = {}
+        self.tag_to_degree = {}
+        self.tag_to_hours = {}
+        self.tag_signature = {}
+        self.tag_paper_requirements = {}
+        self.tag_graduation_status = {}
+
+    def process_all_pdfs(self):
+        pdf_files = [f for f in os.listdir(self.downloaded_pcfrom_path) if f.endswith('.pdf')]
+        tag_to_pdf_map = {}
+        for pdf_file in pdf_files:
+            pdf_path = os.path.join(self.downloaded_pcfrom_path, pdf_file)
+            self.split_pdf_by_tag(pdf_path)
+            self.logger.info(f"Total pages found in {pdf_file}: {self.total_pages_all_pdfs}")
+
+            for tag, pdf_filename in self.tag_to_pdf.items():
+                target_dir = self.find_target_directory(tag)
+                if target_dir:
+                    DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger)
+                    base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
+                    pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
+                    self.open_pdf(pdf_full_path)
+
+                    if self.tag_signature[tag]:
+                        if "master" in self.tag_to_degree[tag].lower() and tag in self.tag_to_hours:
+                            if not self.tag_graduation_status[tag][0] and not self.tag_paper_requirements[tag][0]:
+                                self.handle_folder_move(tag, target_dir)
+                            else:
+                                self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
+                        else:
+                            self.logger.warning(f"Missing credit hours for master's degree for tag: {tag} in PDF {pdf_file}")
+                    else:
+                        self.logger.warning(f"Missing signature for tag: {tag} in PDF {pdf_file}")
+                else:
+                    self.logger.warning(f"Target directory not found for tag {tag} in PDF {pdf_file}")
+
+            tag_to_pdf_map[pdf_file] = self.tag_to_pdf
+
+        self.logger.info(f"Total number of pages in all PDFs: {self.total_pages_all_pdfs}")
+        return tag_to_pdf_map
+
+    def split_pdf_by_tag(self, pdf_path):
+        doc = fitz.open(pdf_path)
+        total_pages = doc.page_count
+        self.total_pages_all_pdfs += total_pages
+
+        try:
+            for page in doc:
+                paper_requirements = None
+                missing_paper_requirements = None
+                graduation_status = None
+                missing_graduation_status = None
+
+                pdf_filename = self.save_page_as_pdf(page, pdf_path)
+                tag = self.extract_tag(page)
+                degree = self.extract_degree(page)
+                hours = self.extract_hours(page)
+                self.tag_signature[tag[0]] = self.check_signature(page)
+                missing_paper_requirements, paper_requirements = self.log_paper_requirements(page)
+                missing_graduation_status, graduation_status = self.log_graduation_status(page)
+
+                if tag:
+                    self.tag_to_pdf[tag[0]] = pdf_filename
+                    if not missing_paper_requirements and paper_requirements:
+                        self.tag_paper_requirements[tag[0]] = (missing_paper_requirements, paper_requirements)
+                    if not missing_graduation_status and graduation_status:
+                        self.tag_graduation_status[tag[0]] = (missing_graduation_status, graduation_status)
+                    if degree:
+                        self.tag_to_degree[tag[0]] = degree[0]
+                    if hours:
+                        self.tag_to_hours[tag[0]] = hours[0]
+                else:
+                    self.logger.warning(f"No tag found on page {page.number + 1} of {pdf_path}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to process PDF {pdf_path}: {e}")
+        finally:
+            doc.close()
+
+    def find_target_directory(self, tag):
+        for root, dirs, _ in os.walk(self.target_root):
+            for name in dirs:
+                if tag in name:
+                    return os.path.join(root, name)
+        return None
+
+    @staticmethod
+    def save_page_as_pdf(page, pdf_path):
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        pdf_filename = f"{base_name}-page-{page.number}-pcform.pdf"
+        pdf_full_path = os.path.join(os.getcwd(), pdf_filename)
+        mat = fitz.Matrix(2, 2)
+        pix = page.get_pixmap(matrix=mat)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img.save(pdf_full_path, "PDF", resolution=200.0)
+        return pdf_full_path
+
+    @staticmethod
+    def open_pdf(pdf_path):
+        os.startfile(pdf_path)
+
+    def handle_folder_move(self, tag, target_dir):
+        if self.tag_graduation_status[tag][1] == "postpone":
+            DirectoryManager.move_folder(target_dir, self.config["postpone_path"], self.logger)
+        elif self.tag_graduation_status != "postpone":
+            if self.tag_paper_requirements[tag][1] == "No Paper Required":
+                DirectoryManager.move_folder(target_dir, self.config["No Paper Required"], self.logger)
+            else:
+                DirectoryManager.move_folder(target_dir, self.config["Paper Required"], self.logger)
+
+    def extract_tag(self, page):
+        return self.extract_text_from_coordinates(page, fitz.Rect(473, 134, 528, 146), r'\d+')
+
+    def extract_degree(self, page):
+        return self.extract_text_from_coordinates(page, fitz.Rect(89.34336475707028, 162.19180565627266, 173.9263959390862, 173.6783901377811), r'[a-zA-Z]+')
+
+    def extract_hours(self, page):
+        return self.extract_text_from_coordinates(page, fitz.Rect(525.57, 226.72, 553.02, 236.90), r'\d+')
+
+    def check_signature(self, page):
+        return self.extract_text_from_coordinates(page, fitz.Rect(379.68, 672.63, 562.93, 684.78), r'[a-zA-Z]+') is not None
+
+    def extract_text_from_coordinates(self, page, clip_rect, regex):
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=clip_rect)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        text = pytesseract.image_to_string(img)
+        return re.search(regex, text)
+
+    def log_paper_requirements(self, page):
+        missing_paper_requirements = True
+        paper_requirements = None
+        coordinates = {
+            "No Paper Required": fitz.Rect(55.67, 290.35, 72.76, 308.50),
+            "Research Paper": fitz.Rect(188.10, 290.35, 205.19, 308.50),
+            "Thesis": fitz.Rect(301.31, 290.35, 318.40, 308.50),
+            "Capstone Report": fitz.Rect(368.60, 290.35, 385.69, 308.50),
+            "Dissertation": fitz.Rect(487.15, 290.35, 504.24, 308.50)
+        }
+        for requirement, coord in coordinates.items():
+            if self.check_checkbox_selection(page, coord, 0.1824812030075188):
+                self.logger.info(f"'{requirement}' is selected on page {page.number + 1}")
+                paper_requirements = requirement
+                missing_paper_requirements = False
+        return missing_paper_requirements, paper_requirements
+
+    def log_graduation_status(self, page):
+        missing_graduation_status = True
+        graduation_status = None
+        coordinates = {
+            "selection_1": fitz.Rect(44.61, 349.8837622348279 - 17.075, 44.61 + 44.4, 349.8837622348279),
+            "postpone": fitz.Rect(44.61, 377.68551106888515 - 17.075, 44.61 + 44.4, 377.68551106888515),
+            "selection_3": fitz.Rect(44.61, 405.7061713110846 - 17.075, 44.61 + 44.4, 405.7061713110846),
+            "selection_4": fitz.Rect(44.61, 435.91594563470585 - 17.075, 44.61 + 44.4, 435.91594563470585)
+        }
+        for status, coord in coordinates.items():
+            if self.check_checkbox_selection(page, coord, 0.03):
+                self.logger.info(f"'{status}' is selected on page {page.number + 1}")
+                graduation_status = status
+                missing_graduation_status = False
+        return missing_graduation_status, graduation_status
+
+    def check_checkbox_selection(self, page, rect, threshold):
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+        white_pixels = cv2.countNonZero(binary)
+        total_pixels = binary.size
+        density = white_pixels / total_pixels
+        return density > threshold
+
+    def rename_logic(self):
+        pdf_files = self.collect_pdf_files()
+        for path, files in pdf_files.items():
+            if 1 in files and 2 in files:
+                self.rename_pcform(files[1], files[2])
+
+    def collect_pdf_files(self):
+        pdf_files = {}
+        for p in self.config["paths"]:
+            directory = os.fsencode(p)
+            for path, subdirs, files in os.walk(directory):
+                path = path.decode("utf-8")
+                for filename in files:
+                    filename = filename.decode("utf-8")
+                    if filename.endswith("pdf"):
+                        if path not in pdf_files:
+                            pdf_files[path] = {}
+                        if "checklist" in filename.lower():
+                            pdf_files[path][1] = os.path.join(path, filename)
+                        elif "pcform" in filename.lower() or "page" in filename.lower():
+                            pdf_files[path][2] = os.path.join(path, filename)
+        return pdf_files
+
+    def rename_pcform(self, checklist_filename, pcform_filename):
+        try:
+            checklist_basename = os.path.basename(checklist_filename)
+            name_part_after_checklist = checklist_basename.split(" - Checklist(244) - ")[1]
+            new_pcform_filename = f"2 - PCForm(244) - {name_part_after_checklist}.pdf"
+            new_pcform_path = os.path.join(os.path.dirname(pcform_filename), new_pcform_filename)
+            if ".pdf.pdf" in new_pcform_path:
+                new_pcform_path = new_pcform_path.replace(".pdf.pdf", ".pdf")
+            if pcform_filename != new_pcform_path:
+                os.rename(pcform_filename, new_pcform_path)
+                self.logger.info(f'Renamed "{pcform_filename}" to "{new_pcform_path}"')
+        except Exception as e:
+            self.logger.error(f"Failed to rename {pcform_filename}: {e}")
+
+if __name__ == "__main__":
+    config_path = "conf.json"  # Replace with your config file path
+    pdf_processor = PDFProcessor(config_path)
+    tag_to_pdf_map = pdf_processor.process_all_pdfs()
+    # print(tag_to_pdf_map)
+    # pdf_processor.rename_logic()
