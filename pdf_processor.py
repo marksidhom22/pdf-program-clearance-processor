@@ -3,62 +3,14 @@ import pytesseract
 import fitz  # PyMuPDF
 import os
 import re
-import logging
-from datetime import datetime
-import shutil
-import json
 import cv2
 import numpy as np
+from config_loader import ConfigLoader
+from logger_setup import LoggerSetup
+from directory_manager import DirectoryManager
 
 # Set the Tesseract OCR path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Users\marks\AppData\Local\Tesseract-OCR\tesseract.exe'
-
-class ConfigLoader:
-    """Loads the configuration from a JSON file."""
-    @staticmethod
-    def load_config(config_path):
-        with open(config_path) as f:
-            return json.load(f)
-
-class LoggerSetup:
-    """Sets up logging for the application."""
-    @staticmethod
-    def setup_logging(output_dir):
-        log_filename = os.path.join(output_dir, "process.log")
-        logging.basicConfig(filename=log_filename, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        logger = logging.getLogger()
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        return logger
-
-class DirectoryManager:
-    """Manages directory creation and file operations."""
-    @staticmethod
-    def create_output_directory():
-        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = os.path.join(os.getcwd(), date_str)
-        os.makedirs(output_dir, exist_ok=True)
-        return output_dir
-
-    @staticmethod
-    def copy_file_to_directory(source, destination, logger):
-        try:
-            shutil.copy(source, destination)
-            logger.info(f"File {source} copied to {destination}")
-        except Exception as e:
-            logger.error(f"Failed to copy {source} to {destination}: {e}")
-
-    @staticmethod
-    def move_folder(source_folder, destination_root, logger):
-        destination_folder = os.path.join(destination_root, os.path.basename(source_folder))
-        try:
-            shutil.move(source_folder, destination_folder)
-            logger.info(f"Moved folder {source_folder} to {destination_folder}")
-        except Exception as e:
-            logger.error(f"Failed to move folder {source_folder} to {destination_folder}: {e}")
 
 class PDFProcessor:
     def __init__(self, config_path):
@@ -78,10 +30,9 @@ class PDFProcessor:
 
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(self.downloaded_pcfrom_path) if f.endswith('.pdf')]
-        # tag_to_pdf_map = {}
         for pdf_file in pdf_files:
             pdf_path = os.path.join(self.downloaded_pcfrom_path, pdf_file)
-            number_pages=self.split_pdf_by_tag(pdf_path)
+            number_pages = self.split_pdf_by_tag(pdf_path)
             self.logger.info(f"Total pages found in {pdf_file}: {number_pages}")
 
             for tag, pdf_filename in self.tag_to_pdf.items():
@@ -92,38 +43,31 @@ class PDFProcessor:
                     pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
                     self.open_pdf(pdf_full_path)
 
-                    if self.is_info_complete(tag,pdf_file):
+                    if self.is_info_complete(tag, pdf_file):
                         self.handle_folder_move(tag, target_dir)
                 else:
                     self.logger.warning(f"Target directory not found for tag {tag} in PDF {pdf_file}")
 
-            # tag_to_pdf_map[pdf_file] = self.tag_to_pdf
-        
         self.logger.info(f"Total number of pages in all PDFs: {self.total_pages_all_pdfs}")
-        self.logger.info(f"process all pdfs Completed")
+        self.logger.info(f"Process all PDFs completed")
 
-        # return tag_to_pdf_map
-
-
-    def is_info_complete(self,tag,pdf_file):
-        info_complete=True
-        # check signature
+    def is_info_complete(self, tag, pdf_file):
+        info_complete = True
         if not self.tag_signature[tag]:
             self.logger.warning(f"Missing signature for tag: {tag} in PDF {pdf_file}")
-            info_complete=False
-                                
+            info_complete = False
+
         if "master" in self.tag_to_degree[tag].lower() and tag not in self.tag_to_hours:
             self.logger.warning(f"Missing credit hours for master's degree for tag: {tag} in PDF {pdf_file}")
-            info_complete=False
+            info_complete = False
 
-        missing_grad_status=self.tag_graduation_status[tag][0]
-        missing_paper_req=self.tag_paper_requirements[tag][0]
-        if missing_grad_status and missing_paper_req :
+        missing_grad_status = self.tag_graduation_status[tag][0]
+        missing_paper_req = self.tag_paper_requirements[tag][0]
+        if missing_grad_status and missing_paper_req:
             self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
-            info_complete=False
+            info_complete = False
 
         return info_complete
-    
 
     def split_pdf_by_tag(self, pdf_path):
         doc = fitz.open(pdf_path)
@@ -294,10 +238,3 @@ class PDFProcessor:
                 self.logger.info(f'Renamed "{pcform_filename}" to "{new_pcform_path}"')
         except Exception as e:
             self.logger.error(f"Failed to rename {pcform_filename}: {e}")
-
-if __name__ == "__main__":
-    config_path = "conf.json"  # Replace with your config file path
-    pdf_processor = PDFProcessor(config_path)
-    pdf_processor.process_all_pdfs()
-    # print(tag_to_pdf_map)
-    # pdf_processor.rename_logic()
