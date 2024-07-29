@@ -10,7 +10,7 @@ from logger_setup import LoggerSetup
 from directory_manager import DirectoryManager
 
 # Set the Tesseract OCR path
-pytesseract.pytesseract.tesseract_cmd = r'C:\Users\marks\AppData\Local\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Users\SIU856562516\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
 
 class PDFProcessor:
     def __init__(self, config_path):
@@ -28,14 +28,25 @@ class PDFProcessor:
         self.tag_paper_requirements = {}
         self.tag_graduation_status = {}
 
+    
+    def reset_dic(self):
+        self.tag_to_pdf = {}
+        self.tag_to_degree = {}
+        self.tag_to_hours = {}
+        self.tag_signature = {}
+        self.tag_paper_requirements = {}
+        self.tag_graduation_status = {}
+
     def process_all_pdfs(self):
         pdf_files = [f for f in os.listdir(self.downloaded_pcfrom_path) if f.endswith('.pdf')]
         for pdf_file in pdf_files:
+            self.reset_dic()
             pdf_path = os.path.join(self.downloaded_pcfrom_path, pdf_file)
             number_pages = self.split_pdf_by_tag(pdf_path)
             self.logger.info(f"Total pages found in {pdf_file}: {number_pages}")
 
             for tag, pdf_filename in self.tag_to_pdf.items():
+                target_dir=""
                 target_dir = self.find_target_directory(tag)
                 if target_dir:
                     DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger)
@@ -66,6 +77,7 @@ class PDFProcessor:
         if missing_grad_status and missing_paper_req:
             self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
             info_complete = False
+        
 
         return info_complete
 
@@ -91,10 +103,10 @@ class PDFProcessor:
 
                 if tag:
                     self.tag_to_pdf[tag[0]] = pdf_filename
-                    if not missing_paper_requirements and paper_requirements:
-                        self.tag_paper_requirements[tag[0]] = (missing_paper_requirements, paper_requirements)
-                    if not missing_graduation_status and graduation_status:
-                        self.tag_graduation_status[tag[0]] = (missing_graduation_status, graduation_status)
+                    # if not missing_paper_requirements and paper_requirements:
+                    self.tag_paper_requirements[tag[0]] = (missing_paper_requirements, paper_requirements)
+                    # if not missing_graduation_status and graduation_status:
+                    self.tag_graduation_status[tag[0]] = (missing_graduation_status, graduation_status)
                     if degree:
                         self.tag_to_degree[tag[0]] = degree[0]
                     if hours:
@@ -147,7 +159,7 @@ class PDFProcessor:
         return self.extract_text_from_coordinates(page, fitz.Rect(89.34336475707028, 162.19180565627266, 173.9263959390862, 173.6783901377811), r'[a-zA-Z]+')
 
     def extract_hours(self, page):
-        return self.extract_text_from_coordinates(page, fitz.Rect(525.57, 226.72, 553.02, 236.90), r'\d+')
+        return self.extract_text_from_coordinates(page, fitz.Rect(525.57, 226.72, 592.02261, 236.90), r'\d+')
 
     def check_signature(self, page):
         return self.extract_text_from_coordinates(page, fitz.Rect(379.68, 672.63, 562.93, 684.78), r'[a-zA-Z]+') is not None
@@ -155,7 +167,18 @@ class PDFProcessor:
     def extract_text_from_coordinates(self, page, clip_rect, regex):
         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=clip_rect)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        # Save the image for debugging
+        # debug_img_path = os.path.join(self.output_dir, f"debug_{requirement}_page_{page.number + 1}.png")
+        # img.save(debug_img_path)        
         text = pytesseract.image_to_string(img)
+        if not text:
+            # Preprocess the image
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+            _, img_cv = cv2.threshold(img_cv, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            
+            # Perform OCR
+            text = pytesseract.image_to_string(img_cv, config='--psm 6')
+
         return re.search(regex, text)
 
     def log_paper_requirements(self, page):

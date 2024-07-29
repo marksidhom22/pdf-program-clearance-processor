@@ -3,3 +3,4 @@ pytesseract
 PyMuPDF
 numpy
 opencv-python-headless
+matplotlib
