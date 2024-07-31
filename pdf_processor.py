@@ -46,15 +46,24 @@ class PDFProcessor:
             self.logger.info(f"Total pages found in {pdf_file}: {number_pages}")
 
             for tag, pdf_filename in self.tag_to_pdf.items():
-                target_dir=""
+                target_dir = ""
                 target_dir = self.find_target_directory(tag)
                 if target_dir:
-                    DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger)
+
+                    DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
                     base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
                     pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
                     self.open_pdf(pdf_full_path)
 
                     if self.is_info_complete(tag, pdf_file):
+                        # Log the selected status and requirement
+                        status = self.tag_graduation_status.get(tag, [None, None])[1]
+                        requirement = self.tag_paper_requirements.get(tag, [None, None])[1]
+                        if status:
+                            self.logger.info(f"'{status}' is selected for tag {tag} in PDF {pdf_file}")
+                        if requirement:
+                            self.logger.info(f"'{requirement}' is selected for tag {tag} in PDF {pdf_file}")
+
                         self.handle_folder_move(tag, target_dir)
                 else:
                     self.logger.warning(f"Target directory not found for tag {tag} in PDF {pdf_file}")
@@ -145,12 +154,13 @@ class PDFProcessor:
 
     def handle_folder_move(self, tag, target_dir):
         if self.tag_graduation_status[tag][1] == "postpone":
-            DirectoryManager.move_folder(target_dir, self.config["postpone_path"], self.logger)
+            DirectoryManager.move_folder(target_dir, self.config["postpone_path"], self.logger, tag)
         elif self.tag_graduation_status != "postpone":
             if self.tag_paper_requirements[tag][1] == "No Paper Required":
-                DirectoryManager.move_folder(target_dir, self.config["No Paper Required"], self.logger)
+                DirectoryManager.move_folder(target_dir, self.config["No Paper Required"], self.logger, tag)
             else:
-                DirectoryManager.move_folder(target_dir, self.config["Paper Required"], self.logger)
+                DirectoryManager.move_folder(target_dir, self.config["Paper Required"], self.logger, tag)
+
 
     def extract_tag(self, page):
         return self.extract_text_from_coordinates(page, fitz.Rect(473, 134, 528, 146), r'\d+')
