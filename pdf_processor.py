@@ -10,7 +10,7 @@ from logger_setup import LoggerSetup
 from directory_manager import DirectoryManager
 
 # Set the Tesseract OCR path
-pytesseract.pytesseract.tesseract_cmd = r'C:\Users\SIU856562516\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Users\marks\AppData\Local\Tesseract-OCR\tesseract.exe'
 
 class PDFProcessor:
     def __init__(self, config_path):
@@ -50,23 +50,24 @@ class PDFProcessor:
                 target_dir = self.find_target_directory(tag)
                 if target_dir:
 
-                    DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
-                    base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
-                    pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
+                    pdf_full_path= DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
+                    # base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
+                    # pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
                     self.open_pdf(pdf_full_path)
 
                     if self.is_info_complete(tag, pdf_file):
                         # Log the selected status and requirement
                         status = self.tag_graduation_status.get(tag, [None, None])[1]
                         requirement = self.tag_paper_requirements.get(tag, [None, None])[1]
-                        if status:
-                            self.logger.info(f"'{status}' is selected for tag {tag} in PDF {pdf_file}")
                         if requirement:
-                            self.logger.info(f"'{requirement}' is selected for tag {tag} in PDF {pdf_file}")
+                            self.logger.info(f"for tag {tag}: '{requirement}' is selected in PDF {pdf_file}")                        
+                        if status:
+                            self.logger.info(f"for tag {tag}: '{status}' is selected in PDF {pdf_file}")
+
 
                         self.handle_folder_move(tag, target_dir)
                 else:
-                    self.logger.warning(f"Target directory not found for tag {tag} in PDF {pdf_file}")
+                    self.logger.warning(f"Student Folder not found for tag {tag} in PDF {pdf_file}")
 
         self.logger.info(f"Total number of pages in all PDFs: {self.total_pages_all_pdfs}")
         self.logger.info(f"Process all PDFs completed")
@@ -203,7 +204,7 @@ class PDFProcessor:
         }
         for requirement, coord in coordinates.items():
             if self.check_checkbox_selection(page, coord, 0.1824812030075188):
-                self.logger.info(f"'{requirement}' is selected on page {page.number + 1}")
+                # self.logger.info(f"'{requirement}' is selected on page {page.number + 1}")
                 paper_requirements = requirement
                 missing_paper_requirements = False
         return missing_paper_requirements, paper_requirements
@@ -219,7 +220,7 @@ class PDFProcessor:
         }
         for status, coord in coordinates.items():
             if self.check_checkbox_selection(page, coord, 0.03):
-                self.logger.info(f"'{status}' is selected on page {page.number + 1}")
+                # self.logger.info(f"'{status}' is selected on page {page.number + 1}")
                 graduation_status = status
                 missing_graduation_status = False
         return missing_graduation_status, graduation_status

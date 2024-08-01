@@ -16,11 +16,58 @@ class DirectoryManager:
     def copy_file_to_directory(source, destination, logger, tag):
         try:
             shutil.copy(source, destination)
-            source_last_dir = os.path.basename(os.path.dirname(source))
-            destination_last_dir = os.path.basename(os.path.dirname(destination))
-            logger.info(f"for tag '{tag}': File from '{source_last_dir}' copied to '{destination_last_dir}'")
+            logger.info(f"for tag '{tag}': File copied from '{source}' copied to '{destination}'")
+            
         except Exception as e:
-            logger.error(f"Failed to copy {source} to {destination}: {e}")
+            logger.error(f"for tag '{tag}: Failed to copy {source} to {destination}: {e}")
+        try:
+            # Rename the copied file
+            return DirectoryManager.rename_copied_file(destination, logger)
+        except Exception as e:
+            logger.error(f"for tag '{tag} in {destination}: Failed to rename: {e}")
+
+            
+    @staticmethod
+    def rename_copied_file(destination, logger):
+        try:
+            # Get the folder path
+            folder_path = destination
+            
+            # Find the file that starts with "1 - Checklist" in the destination folder
+            checklist_file = None
+            for file in os.listdir(folder_path):
+                if "checklist" in file.lower():
+                    checklist_file = file
+                    break
+
+            pcform_file = file
+            for file in os.listdir(folder_path):
+                if "pcform" in file.lower():
+                    pcform_file = file
+                    break            
+
+            if checklist_file is None:
+                raise FileNotFoundError("Checklist file not found in the destination folder.")
+            if pcform_file is None:
+                raise FileNotFoundError("pcform file not found in the destination folder.")
+
+            # Create the new file name by replacing "Checklist" with "PCForm"
+            new_file_name = checklist_file.replace("1 - Checklist", "2 - PCForm")
+            new_file_name = new_file_name.replace("1 - checklist", "2 - PCForm")
+
+            file_extension = os.path.splitext(destination)[1]
+            
+            # Define the new file path
+            new_file_path = os.path.join(folder_path, new_file_name)
+            pcform_file_path=os.path.join(folder_path, pcform_file)
+            # Rename the copied file
+            os.rename(pcform_file_path, new_file_path)
+            logger.info(f"File renamed to '{new_file_name}'")
+            return new_file_path
+            
+        except Exception as e:
+            logger.error(f"Failed to rename file {destination}: {e}")
+
 
     @staticmethod
     def move_folder(source_folder, destination_root, logger, tag):
