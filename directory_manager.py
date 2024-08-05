@@ -76,6 +76,6 @@ class DirectoryManager:
             shutil.move(source_folder, destination_folder)
             source_last_dir = os.path.basename(source_folder)
             destination_last_dir = os.path.basename(destination_folder)
-            logger.info(f"for tag '{tag}': Moved folder '{source_last_dir}' to '{destination_last_dir}' ")
+            logger.info(f"for tag '{tag}': Moved folder '{source_last_dir}' to '{destination_folder}' ")
         except Exception as e:
             logger.error(f"Failed to move folder {source_folder} to {destination_folder}: {e}")
