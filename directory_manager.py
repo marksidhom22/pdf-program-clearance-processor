@@ -71,6 +71,7 @@ class DirectoryManager:
 
     @staticmethod
     def move_folder(source_folder, destination_root, logger, tag):
+        rv= True
         destination_folder = os.path.join(destination_root, os.path.basename(source_folder))
         try:
             shutil.move(source_folder, destination_folder)
@@ -79,3 +80,5 @@ class DirectoryManager:
             logger.info(f"for tag '{tag}': Moved folder '{source_last_dir}' to '{destination_folder}' ")
         except Exception as e:
             logger.error(f"Failed to move folder {source_folder} to {destination_folder}: {e}")
+            rv= False
+        return rv

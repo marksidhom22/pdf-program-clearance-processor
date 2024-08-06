@@ -21,6 +21,8 @@ class PDFProcessor:
         self.target_root = self.config["target_root"]
         self.downloaded_pcfrom_path = self.config["downloaded_pcfrom_path"]
         self.total_pages_all_pdfs = 0
+        self.total_pages_copied = 0
+        self.total_pages_moved = 0
         self.tag_to_pdf = {}
         self.tag_to_degree = {}
         self.tag_to_hours = {}
@@ -53,7 +55,8 @@ class PDFProcessor:
                     pdf_full_path= DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
                     # base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
                     # pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
-                    self.open_pdf(pdf_full_path)
+                    if self.open_pdf(pdf_full_path):
+                        self.total_pages_copied+=1
 
                     if self.is_info_complete(tag, pdf_file):
                         # Log the selected status and requirement
@@ -65,11 +68,14 @@ class PDFProcessor:
                             self.logger.info(f"for tag {tag}: '{status}' is selected in PDF {pdf_file}")
 
 
-                        self.handle_folder_move(tag, target_dir)
+                        if self.handle_folder_move(tag, target_dir):
+                            self.total_pages_moved+=1
                 else:
                     self.logger.warning(f"Student Folder not found for tag {tag} in PDF {pdf_file}")
 
         self.logger.info(f"Total number of pages in all PDFs: {self.total_pages_all_pdfs}")
+        self.logger.info(f"Total number of copied: {self.total_pages_copied}")
+        self.logger.info(f"Total number of moved: {self.total_pages_moved}")
         self.logger.info(f"Process all PDFs completed")
 
     def is_info_complete(self, tag, pdf_file):
@@ -152,6 +158,7 @@ class PDFProcessor:
     @staticmethod
     def open_pdf(pdf_path):
         os.startfile(pdf_path)
+        return True
 
     def handle_folder_move(self, tag, target_dir):
         if self.tag_graduation_status[tag][1] == "postpone":
