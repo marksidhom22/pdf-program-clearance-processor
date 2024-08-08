@@ -161,12 +161,12 @@ class PDFProcessor:
 
     def handle_folder_move(self, tag, target_dir):
         if self.tag_graduation_status[tag][1] == "postpone":
-            DirectoryManager.move_folder(target_dir, self.config["postpone_path"], self.logger, tag)
+            return DirectoryManager.move_folder(target_dir, self.config["postpone_path"], self.logger, tag)
         elif self.tag_graduation_status != "postpone":
             if self.tag_paper_requirements[tag][1] == "No Paper Required":
-                DirectoryManager.move_folder(target_dir, self.config["No Paper Required"], self.logger, tag)
+                return DirectoryManager.move_folder(target_dir, self.config["No Paper Required"], self.logger, tag)
             else:
-                DirectoryManager.move_folder(target_dir, self.config["Paper Required"], self.logger, tag)
+                return DirectoryManager.move_folder(target_dir, self.config["Paper Required"], self.logger, tag)
 
 
     def extract_tag(self, page):
