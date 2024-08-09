@@ -149,7 +149,7 @@ class PDFProcessor:
     def save_page_as_pdf(self,page, pdf_path):
         base_name = os.path.splitext(os.path.basename(pdf_path))[0]
         pdf_filename = f"{base_name}-page-{page.number}-pcform.pdf"
-        pdf_full_path = os.path.join(self.downloaded_pcfrom_path, pdf_filename)
+        pdf_full_path = os.path.join(self.output_dir, pdf_filename)
         mat = fitz.Matrix(2, 2)
         pix = page.get_pixmap(matrix=mat)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
