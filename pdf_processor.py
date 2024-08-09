@@ -81,19 +81,21 @@ class PDFProcessor:
     def is_info_complete(self, tag, pdf_file):
         info_complete = True
         if not self.tag_signature[tag]:
-            self.logger.warning(f"Missing signature for tag: {tag} in PDF {pdf_file}")
+            self.logger.warning(f"for tag: {tag} : Missing signature in PDF {pdf_file}")
             info_complete = False
 
         if "master" in self.tag_to_degree[tag].lower() and tag not in self.tag_to_hours:
-            self.logger.warning(f"Missing credit hours for master's degree for tag: {tag} in PDF {pdf_file}")
+            self.logger.warning(f"for tag: {tag} : Missing credit hours for master's degree in PDF {pdf_file}")
             info_complete = False
 
         missing_grad_status = self.tag_graduation_status[tag][0]
         missing_paper_req = self.tag_paper_requirements[tag][0]
-        if missing_grad_status and missing_paper_req:
-            self.logger.warning(f"Missing paper requirements or graduation status for tag: {tag} in PDF {pdf_file}")
+        if missing_paper_req:
+            self.logger.warning(f"for tag: {tag} : Missing paper requirements in PDF {pdf_file}")
             info_complete = False
-        
+        if missing_grad_status :
+            self.logger.warning(f"for tag: {tag} : Missing graduation status in PDF {pdf_file}")
+            info_complete = False
 
         return info_complete
 
