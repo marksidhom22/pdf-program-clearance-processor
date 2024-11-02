@@ -29,7 +29,30 @@ class PDFProcessor:
         self.tag_signature = {}
         self.tag_paper_requirements = {}
         self.tag_graduation_status = {}
+        self.directory_cache = {}
 
+    def build_directory_cache(self):
+        """
+        Build a cache mapping tags to their respective directories.
+        """
+        self.logger.info(f"building directory cache")
+
+        for root, dirs, _ in os.walk(self.target_root):
+            for name in dirs:
+                # Assuming each directory name contains a unique tag
+                tag = self.extract_tag_from_directory_name(name)
+                if tag:
+                    self.directory_cache[int(tag)] = os.path.join(root, name)
+
+
+    def extract_tag_from_directory_name(self, dir_name):
+        """
+        Extracts tag from the directory name based on a pattern.
+        Modify this function based on the naming convention of your directories.
+        """
+        # Example extraction (assume tag is numeric in the directory name)
+        match = re.search(r'\d+', dir_name)
+        return match.group(0) if match else None
     
     def reset_dic(self):
         self.tag_to_pdf = {}
@@ -40,8 +63,11 @@ class PDFProcessor:
         self.tag_graduation_status = {}
 
     def process_all_pdfs(self):
+        self.build_directory_cache()
+
         pdf_files = [f for f in os.listdir(self.downloaded_pcfrom_path) if f.endswith('.pdf')]
         for pdf_file in pdf_files:
+
             self.reset_dic()
             pdf_path = os.path.join(self.downloaded_pcfrom_path, pdf_file)
             number_pages = self.split_pdf_by_tag(pdf_path)
@@ -49,16 +75,16 @@ class PDFProcessor:
 
             for tag, pdf_filename in self.tag_to_pdf.items():
                 target_dir = ""
-                target_dir = self.find_target_directory(tag)
+                target_dir = self.find_target_directory(int(tag))
+                # if not target_dir:
+                #     base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
+                #     pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
+                #     self.open_pdf(pdf_full_path)
                 if target_dir:
-
-                    pdf_full_path= DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
-                    # base_name = os.path.splitext(os.path.basename(pdf_filename))[0]
-                    # pdf_full_path = os.path.join(target_dir, base_name + '.pdf')
-                    if self.open_pdf(pdf_full_path):
+                    if self.is_info_complete(tag, pdf_file):
+                        pdf_full_path= DirectoryManager.copy_file_to_directory(pdf_filename, target_dir, self.logger, tag)
                         self.total_pages_copied+=1
 
-                    if self.is_info_complete(tag, pdf_file):
                         # Log the selected status and requirement
                         status = self.tag_graduation_status.get(tag, [None, None])[1]
                         requirement = self.tag_paper_requirements.get(tag, [None, None])[1]
@@ -96,7 +122,8 @@ class PDFProcessor:
         if missing_grad_status :
             self.logger.warning(f"for tag: {tag} : Missing graduation status in PDF {pdf_file}")
             info_complete = False
-
+        # if not info_complete:
+        #     self.open_pdf(pdf_file)
         return info_complete
 
     def split_pdf_by_tag(self, pdf_path):
@@ -139,12 +166,20 @@ class PDFProcessor:
         finally:
             doc.close()
 
+    # def find_target_directory(self, tag):
+    #     for root, dirs, _ in os.walk(self.target_root):
+    #         for name in dirs:
+    #             if tag in name:
+    #                 return os.path.join(root, name)
+    #     return None
+
     def find_target_directory(self, tag):
-        for root, dirs, _ in os.walk(self.target_root):
-            for name in dirs:
-                if tag in name:
-                    return os.path.join(root, name)
-        return None
+        """
+        Find the target directory using the cache instead of walking the file system.
+        """
+        return self.directory_cache.get(tag)
+
+
 
     def save_page_as_pdf(self,page, pdf_path):
         base_name = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -158,7 +193,10 @@ class PDFProcessor:
 
     @staticmethod
     def open_pdf(pdf_path):
-        os.startfile(pdf_path)
+        try:
+            os.startfile(pdf_path)
+        except Exception as e:
+            print(e)
         return True
 
     def handle_folder_move(self, tag, target_dir):
