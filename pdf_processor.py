@@ -31,6 +31,19 @@ class PDFProcessor:
         self.tag_graduation_status = {}
         self.directory_cache = {}
 
+    def rename_pdf_file(self,pdf_filename, prefix="0_Done_"):
+        # Extract directory and file parts
+        dir_name = os.path.dirname(pdf_filename)
+        base_name = os.path.basename(pdf_filename)
+        
+        # Add prefix to the filename
+        new_base_name = f"{prefix}{base_name}"
+        new_pdf_filename = os.path.join(dir_name, new_base_name)
+        
+        # Rename the file
+        os.rename(pdf_filename, new_pdf_filename)
+        return new_pdf_filename
+    
     def build_directory_cache(self):
         """
         Build a cache mapping tags to their respective directories.
@@ -96,6 +109,9 @@ class PDFProcessor:
 
                         if self.handle_folder_move(tag, target_dir):
                             self.total_pages_moved+=1
+                            # Rename PDF file with prefix
+                            self.rename_pdf_file(pdf_filename)
+
                 else:
                     self.logger.warning(f"Student Folder not found for tag {tag} in PDF {pdf_file}")
 
